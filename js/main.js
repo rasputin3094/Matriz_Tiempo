@@ -5,6 +5,7 @@ let timeline, items, groups;
 let nextGroupId = 1, nextEventId = 1;
 let audioFiles = [];
 
+// Claves para localStorage
 const LS_ITEMS = "timeline_items";
 const LS_GROUPS = "timeline_groups";
 const LS_RANGE = "timeline_range";
@@ -12,6 +13,7 @@ const LS_RANGE = "timeline_range";
 let autoSaveInterval = null;
 const controlSelectors = [
 	"#btnOpenModal",
+	"#btnEditGrupos",
 	"#btnAddEvento",
 	"#btnExportar",
 	"#btnImportar",
@@ -26,16 +28,20 @@ const controlSelectors = [
 // Para programar alertas futuras
 let alertTimeouts = [];
 
+// Estado de edición de grupos
+let editingGroups = false;
+let currentEditGroupId = null;
+
 /**
- * Programa una alerta visual y sonora para un evento
- * @param {{id:number,content:string,start:Date,alerta:boolean,audio:string}} evt 
+ * Programa una alerta visual y sonora para un evento futuro
+ * @param {{id:number,content:string,start:Date,alerta:boolean,audio:string}} evt
  */
 function scheduleAlert(evt) {
 	if (!evt.alerta || !evt.audio) return;
 	const now = Date.now();
 	const startTime = new Date(evt.start).getTime();
 	const delay = startTime - now;
-	if (delay <= 0) return; // ya pasó
+	if (delay <= 0) return; // ya pasó o es inmediato
 	const timeoutId = setTimeout(() => {
 		toastr.error(evt.content, '¡Alerta de evento!', { positionClass: 'toast-bottom-right' });
 		new Audio(`music/${evt.audio}`).play();
@@ -75,18 +81,46 @@ document.addEventListener("DOMContentLoaded", async () => {
 	document.getElementById("fechaInicio").value = "";
 	document.getElementById("fechaFin").value = "";
 
-	// ─ Abrir modal Grupos ─
+	// ─ Botón Agregar Grupos ─
 	document.getElementById("btnOpenModal").onclick = () => {
-		if (!document.querySelector("#contenedorGrupos .col-12")) {
-			agregarGrupoCard();
-		}
+		editingGroups = false;
+		currentEditGroupId = null;
+		document.getElementById("btnAddGrupo").style.display = "";
+		document.getElementById("contenedorGrupos").innerHTML = "";
+		// Agregar un card en blanco
+		agregarGrupoCard();
+		new bootstrap.Modal(document.getElementById("modalGrupos")).show();
 	};
-	document.getElementById("btnAddGrupo")
-		.addEventListener("click", e => { e.preventDefault(); agregarGrupoCard(); });
-	document.getElementById("formGrupos")
-		.addEventListener("submit", onGuardarGrupos);
 
-	// ─ Abrir modal Eventos ─
+	const modalGruposEl = document.getElementById("modalGrupos");
+	modalGruposEl.addEventListener("hidden.bs.modal", () => {
+		// Quitar la clase que bloquea el scroll al body
+		document.body.classList.remove("modal-open");
+		// Eliminar todos los backdrops que hayan quedado
+		document.querySelectorAll(".modal-backdrop").forEach(el => el.remove());
+	});
+
+	// ─ Botón Editar Grupos ─
+	document.getElementById("btnEditGrupos").onclick = () => {
+		editingGroups = true;
+		currentEditGroupId = null;
+		document.getElementById("btnAddGrupo").style.display = "";
+		const cont = document.getElementById("contenedorGrupos");
+		cont.innerHTML = "";
+		groups.get({ filter: g => g.treeLevel === 1 }).forEach(g => {
+			crearGrupoCardDesdeData(g.id, stripTags(g.content), g.style, g.nestedGroups);
+		});
+		new bootstrap.Modal(document.getElementById("modalGrupos")).show();
+	};
+
+	// ─ Guardar Grupos (añadir o editar) ─
+	document.getElementById("btnAddGrupo").addEventListener("click", e => {
+		e.preventDefault();
+		agregarGrupoCard();
+	});
+	document.getElementById("formGrupos").addEventListener("submit", onGuardarGrupos);
+
+	// ─ Botón Agregar Eventos ─
 	document.getElementById("btnAddEvento").onclick = () => {
 		fillGrupoSelect();
 		clearEventosContainer();
@@ -96,18 +130,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 		e.preventDefault();
 		agregarEventoRow();
 	};
-	document.getElementById("formEventos")
-		.addEventListener("submit", onGuardarEventos);
+	document.getElementById("formEventos").addEventListener("submit", onGuardarEventos);
 
-	// ─ Lógica de habilitación tras elegir Grupo ─
+	// ─ Habilitación tras elegir Grupo en modal Eventos ─
 	document.getElementById("selectGrupo").onchange = onGrupoChange;
-	// ─ Reset modal al cerrarlo ─
-	document.getElementById("modalEventos")
-		.addEventListener("hidden.bs.modal", resetModalEventos);
+	document.getElementById("modalEventos").addEventListener("hidden.bs.modal", resetModalEventos);
 
 	// ─ Fechas → generar timeline ─
-	document.getElementById("form-fechas")
-		.addEventListener("submit", onCargarFechas);
+	document.getElementById("form-fechas").addEventListener("submit", onCargarFechas);
 
 	// ─ Export / Import / Limpiar ─
 	document.getElementById("btnExportar").addEventListener("click", exportarJSON);
@@ -128,7 +158,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 		setControlsDisabled(false);
 	} else {
 		setControlsDisabled(true);
-		generarTimeline(new Date(), new Date(Date.now() + 2 * 3600000));
+		generarTimeline(new Date(), new Date(Date.now() + 2 * 3600_000));
 	}
 
 	iniciarAutoGuardado();
@@ -141,10 +171,10 @@ function setControlsDisabled(disabled) {
 }
 function iniciarAutoGuardado() {
 	if (autoSaveInterval) clearInterval(autoSaveInterval);
-	autoSaveInterval = setInterval(guardarEnLocalStorage, 10000);
+	autoSaveInterval = setInterval(guardarEnLocalStorage, 10_000);
 }
 
-// — Función para habilitar controles y setear color al elegir Grupo —
+// ─ Habilitar controles y setear color tras elegir Grupo ─
 function onGrupoChange() {
 	const gid = +this.value;
 	const selU = document.getElementById("selectUnidad");
@@ -161,13 +191,12 @@ function onGrupoChange() {
 		const m = style.match(/#([0-9A-Fa-f]{6})/);
 		if (m) baseColor = m[0];
 	}
-	document.querySelectorAll(".evento-color")
-		.forEach(i => i.value = baseColor);
+	document.querySelectorAll(".evento-color").forEach(i => i.value = baseColor);
 
 	fillUnidadSelect(gid);
 }
 
-// — Reset completo del modal de Eventos al cerrarlo —
+// ─ Reset modal Eventos al cerrarlo ─
 function resetModalEventos() {
 	document.getElementById("formEventos").reset();
 	clearEventosContainer();
@@ -176,7 +205,7 @@ function resetModalEventos() {
 	document.querySelector("#formEventos button[type='submit']").disabled = true;
 }
 
-// — Configurar Grupos —
+// ─ Agregar tarjeta en modal Grupos ─
 function agregarGrupoCard() {
 	const gid = nextGroupId++;
 	const cont = document.getElementById("contenedorGrupos");
@@ -200,8 +229,25 @@ function agregarGrupoCard() {
           <i class="fas fa-plus me-1"></i>Agregar Unidad
         </button>
       </div>
-    </div>`;
-	col.querySelector(".btnRemoveGrupo").onclick = () => col.remove();
+    </div>
+  `;
+	// Borrar tarjeta
+	col.querySelector(".btnRemoveGrupo").onclick = () => {
+		Swal.fire({
+			title: '¿Eliminar este grupo?',
+			text: 'Se borrarán sus unidades y eventos.',
+			icon: 'warning',
+			showCancelButton: true,
+			confirmButtonText: 'Sí, eliminar'
+		}).then(res => {
+			if (res.isConfirmed) {
+				const gidNum = +col.dataset.grupoId;
+				items.remove(it => String(it.group).startsWith(String(gidNum)));
+				col.remove();
+			}
+		});
+	};
+	// Agregar unidad
 	col.querySelector(".btnAddUnidad").onclick = () => {
 		const ul = col.querySelector(".lista-unidades");
 		const li = document.createElement("li");
@@ -210,14 +256,83 @@ function agregarGrupoCard() {
       <input type="text" class="form-control form-control-sm nombre-unidad me-2" placeholder="Nombre de la unidad" required>
       <button type="button" class="btn btn-outline-danger btn-sm btnRemoveUnidad">
         <i class="fas fa-times"></i>
-      </button>`;
-		li.querySelector(".btnRemoveUnidad").onclick = () => li.remove();
+      </button>
+    `;
+		li.querySelector(".btnRemoveUnidad").onclick = () => {
+			Swal.fire({
+				title: '¿Eliminar esta unidad?',
+				text: 'Se borrarán sus eventos.',
+				icon: 'warning',
+				showCancelButton: true,
+				confirmButtonText: 'Sí, eliminar'
+			}).then(res => {
+				if (res.isConfirmed) {
+					const idx = Array.from(ul.children).indexOf(li);
+					const uid = gid * 100 + idx + 1;
+					items.remove(it => it.group === uid);
+					li.remove();
+				}
+			});
+		};
 		ul.appendChild(li);
 	};
+
 	cont.appendChild(col);
 }
+
+// ─ Guardar o actualizar Grupos ─
 function onGuardarGrupos(e) {
 	e.preventDefault();
+
+	// Edición de un solo grupo
+	if (editingGroups && currentEditGroupId !== null) {
+		const col = document.querySelector(`[data-grupo-id="${currentEditGroupId}"]`);
+		const gName = col.querySelector(".nombre-grupo").value.trim();
+		let color = col.querySelector(".color-grupo").value;
+		const [r, g, b] = color.match(/[A-Fa-f0-9]{2}/g).map(h => parseInt(h, 16));
+		if (!esColorClaro(r, g, b)) color = generarColorClaro();
+
+		// Eliminar antiguas unidades y eventos
+		const oldNested = groups.get(currentEditGroupId).nestedGroups || [];
+		oldNested.forEach(uid => {
+			items.remove(it => it.group === uid);
+			groups.remove(uid);
+		});
+
+		// Nuevo nested
+		const newUnits = [];
+		col.querySelectorAll(".nombre-unidad").forEach((inp, i) => {
+			const u = inp.value.trim();
+			if (!u) return;
+			newUnits.push(currentEditGroupId * 100 + i + 1);
+		});
+
+		// Actualizar padre
+		groups.update({
+			id: currentEditGroupId,
+			content: `<strong>${gName}</strong>`,
+			nestedGroups: newUnits,
+			style: `background-color:${color}`
+		});
+
+		// Añadir unidades
+		newUnits.forEach((uid, i) => {
+			const name = col.querySelectorAll(".nombre-unidad")[i].value.trim();
+			groups.add({
+				id: uid,
+				content: name,
+				treeLevel: 2,
+				style: `background-color:${color}`
+			});
+		});
+
+		timeline.setGroups(groups);
+		bootstrap.Modal.getInstance(document.getElementById("modalGrupos")).hide();
+		guardarEnLocalStorage();
+		return;
+	}
+
+	// Modo batch (crear/reemplazar todos)
 	groups.clear();
 	const arr = [];
 	document.querySelectorAll("#contenedorGrupos [data-grupo-id]").forEach(col => {
@@ -233,7 +348,7 @@ function onGuardarGrupos(e) {
 			if (!u) return;
 			const uid = gid * 100 + i + 1;
 			nested.push(uid);
-			arr.push({ id: uid, content: u, treeLevel: 2, style: `background-color:${color}`, alerta: false, audio: "" });
+			arr.push({ id: uid, content: u, treeLevel: 2, style: `background-color:${color}` });
 		});
 		arr.push({
 			id: gid,
@@ -246,26 +361,219 @@ function onGuardarGrupos(e) {
 	groups.add(arr);
 	timeline.setGroups(groups);
 	bootstrap.Modal.getInstance(document.getElementById("modalGrupos")).hide();
+	guardarEnLocalStorage();
 }
 
-// — Configurar Eventos —
-function fillGrupoSelect() {
-	const sel = document.getElementById("selectGrupo");
-	sel.innerHTML = `<option value="">-- Elige grupo --</option>`;
-	groups.get({ filter: g => g.treeLevel === 1 })
-		.forEach(g => sel.innerHTML += `<option value="${g.id}">${stripTags(g.content)}</option>`);
-}
-function fillUnidadSelect(gid) {
-	const sel = document.getElementById("selectUnidad");
-	sel.innerHTML = `<option value="">-- Elige unidad --</option>`;
-	groups.get({ filter: u => u.treeLevel === 2 && String(u.id).startsWith(String(gid)) })
-		.forEach(u => sel.innerHTML += `<option value="${u.id}">${u.content}</option>`);
-}
-function clearEventosContainer() {
-	document.getElementById("eventosContainer").innerHTML = "";
+// ─ Plantilla para crear tarjeta desde datos ─
+function crearGrupoCardDesdeData(gid, nombre, style, nestedIds) {
+	const cont = document.getElementById("contenedorGrupos");
+	const colorMatch = style.match(/#([0-9A-Fa-f]{6})/);
+	const color = colorMatch ? colorMatch[0] : generarColorClaro();
+
+	const col = document.createElement("div");
+	col.className = "col-12 mb-3";
+	col.dataset.grupoId = gid;
+	col.innerHTML = `
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex mb-3">
+          <input type="text" class="form-control me-2 nombre-grupo" value="${nombre}" required>
+          <input type="color" class="form-control form-control-color me-2 color-grupo" value="${color}">
+          <button type="button" class="btn btn-outline-danger btn-sm btnRemoveGrupo">
+            <i class="fas fa-trash-alt"></i>
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm btnEditThis">
+            <i class="fas fa-edit"></i>
+          </button>
+        </div>
+        <ul class="list-group lista-unidades mb-3"></ul>
+        <button type="button" class="btn btn-outline-secondary btn-sm btnAddUnidad">
+          <i class="fas fa-plus me-1"></i>Agregar Unidad
+        </button>
+      </div>
+    </div>
+  `;
+	// Eliminar grupo
+	col.querySelector(".btnRemoveGrupo").onclick = () => {
+		Swal.fire({
+			title: '¿Eliminar este grupo?',
+			text: 'Se borrarán sus unidades y eventos.',
+			icon: 'warning',
+			showCancelButton: true
+		}).then(res => {
+			if (res.isConfirmed) {
+				items.remove(it => it.group.toString().startsWith(gid.toString()));
+				groups.remove({ id: gid });
+				col.remove();
+			}
+		});
+	};
+	// Editar solo este grupo
+	col.querySelector(".btnEditThis").onclick = () => abrirModalEdicionGrupo(gid);
+	// Agregar unidad
+	col.querySelector(".btnAddUnidad").onclick = () => {
+		const ul = col.querySelector(".lista-unidades");
+		const li = document.createElement("li");
+		li.className = "list-group-item d-flex align-items-center";
+		li.innerHTML = `
+      <input type="text" class="form-control form-control-sm nombre-unidad me-2" placeholder="Nombre de la unidad" required>
+      <button type="button" class="btn btn-outline-danger btn-sm btnRemoveUnidad">
+        <i class="fas fa-times"></i>
+      </button>`;
+		li.querySelector(".btnRemoveUnidad").onclick = () => {
+			Swal.fire({
+				title: '¿Eliminar esta unidad?',
+				text: 'Se borrarán sus eventos.',
+				icon: 'warning',
+				showCancelButton: true
+			}).then(res => {
+				if (res.isConfirmed) {
+					const idx = Array.from(ul.children).indexOf(li);
+					const uid = gid * 100 + idx + 1;
+					items.remove(it => it.group === uid);
+					li.remove();
+				}
+			});
+		};
+		ul.appendChild(li);
+	};
+	// Cargar subunidades existentes
+	const ul = col.querySelector(".lista-unidades");
+	nestedIds.forEach(uid => {
+		const unidad = groups.get(uid);
+		if (!unidad) return;
+		const li = document.createElement("li");
+		li.className = "list-group-item d-flex align-items-center";
+		li.innerHTML = `
+      <input type="text" class="form-control form-control-sm nombre-unidad me-2" value="${unidad.content}" required>
+      <button type="button" class="btn btn-outline-danger btn-sm btnRemoveUnidad">
+        <i class="fas fa-times"></i>
+      </button>`;
+		li.querySelector(".btnRemoveUnidad").onclick = () => {
+			Swal.fire({
+				title: '¿Eliminar esta unidad?',
+				text: 'Se borrarán sus eventos.',
+				icon: 'warning',
+				showCancelButton: true
+			}).then(res => {
+				if (res.isConfirmed) {
+					items.remove(it => it.group === uid);
+					li.remove();
+				}
+			});
+		};
+		ul.appendChild(li);
+	});
+
+	cont.appendChild(col);
 }
 
-// — Agregar fila de Evento —
+// ─ Abrir modal para editar un grupo existente ─
+function abrirModalEdicionGrupo(gid) {
+	editingGroups = true;
+	currentEditGroupId = gid;
+	document.getElementById("btnAddGrupo").style.display = "none";
+	const cont = document.getElementById("contenedorGrupos");
+	cont.innerHTML = "";
+	const g = groups.get(gid);
+	crearGrupoCardDesdeData(gid, stripTags(g.content), g.style, g.nestedGroups || []);
+	new bootstrap.Modal(document.getElementById("modalGrupos")).show();
+}
+
+// ─ Persistencia en LocalStorage ─
+function guardarEnLocalStorage() {
+	localStorage.setItem(LS_ITEMS, JSON.stringify(items.get()));
+	localStorage.setItem(LS_GROUPS, JSON.stringify(groups.get()));
+	if (timeline) {
+		const w = timeline.getWindow();
+		localStorage.setItem(LS_RANGE, JSON.stringify({ start: w.start, end: w.end }));
+	}
+}
+
+// ─ Exportar JSON ─
+function exportarJSON() {
+	const data = { items: items.get(), groups: groups.get() };
+	const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+	const a = document.createElement("a");
+	a.href = URL.createObjectURL(blob);
+	a.download = "timeline_export.json";
+	a.click();
+}
+
+// ─ Importar JSON ─
+function importarJSON(e) {
+	const f = e.target.files[0];
+	if (!f) return;
+	const r = new FileReader();
+	r.onload = ev => {
+		try {
+			const d = JSON.parse(ev.target.result);
+			items.clear();
+			groups.clear();
+			items.add(d.items || []);
+			groups.add(d.groups || []);
+			const all = items.getIds().map(i => Number(i));
+			nextEventId = all.length ? Math.max(...all) + 1 : 1;
+			cargarDesdeLocalStorage();
+			setControlsDisabled(false);
+		} catch {
+			alert("JSON inválido");
+		}
+	};
+	r.readAsText(f);
+}
+
+// ─ Limpiar todo ─
+function limpiarTodo() {
+	clearScheduledAlerts();
+	localStorage.removeItem(LS_ITEMS);
+	localStorage.removeItem(LS_GROUPS);
+	localStorage.removeItem(LS_RANGE);
+	items.clear();
+	groups.clear();
+	generarTimeline(new Date(), new Date(Date.now() + 2 * 3600_000));
+	setControlsDisabled(true);
+}
+
+// ─ Modal Eventos: Guardar nuevos eventos ─
+function onGuardarEventos(e) {
+	e.preventDefault();
+	const uid = +document.getElementById("selectUnidad").value;
+
+	clearScheduledAlerts();
+	// no removemos items aquí para soportar múltiple
+
+	document.querySelectorAll(".evento-row").forEach(row => {
+		const color = row.querySelector(".evento-color").value;
+		const t = row.querySelector(".evento-titulo").value.trim();
+		const si = row.querySelector(".evento-fecha-inicio").value;
+		const sf = row.querySelector(".evento-fecha-fin").value;
+		const al = row.querySelector(".evento-alerta").checked;
+		const aud = row.querySelector(".evento-audio").value;
+
+		const start = new Date(si);
+		const end = new Date(sf);
+
+		const evt = {
+			id: nextEventId++,
+			group: uid,
+			content: t,
+			start, end,
+			type: 'range',
+			style: `background-color:${color};`,
+			alerta: al,
+			audio: aud
+		};
+		items.add(evt);
+		scheduleAlert(evt);
+	});
+
+	timeline.setItems(items);
+	guardarEnLocalStorage();
+	bootstrap.Modal.getInstance(document.getElementById("modalEventos")).hide();
+}
+
+// ─ Agregar fila de Evento en modal ─
 function agregarEventoRow() {
 	const gid = +document.getElementById("selectGrupo").value;
 	let defaultColor = "#ffffff";
@@ -274,6 +582,7 @@ function agregarEventoRow() {
 		const m = st.match(/#([0-9A-Fa-f]{6})/);
 		if (m) defaultColor = m[0];
 	}
+
 	const cont = document.getElementById("eventosContainer");
 	const row = document.createElement("div");
 	row.className = "row g-2 align-items-end evento-row mb-2";
@@ -313,7 +622,8 @@ function agregarEventoRow() {
       <button type="button" class="btn btn-outline-secondary btn-sm btnPlayAudio" disabled style="display:none;">
         <i class="fas fa-play"></i>
       </button>
-    </div>`;
+    </div>
+  `;
 	const chk = row.querySelector(".evento-alerta");
 	const sel = row.querySelector(".evento-audio");
 	const btn = row.querySelector(".btnPlayAudio");
@@ -329,29 +639,23 @@ function agregarEventoRow() {
 			btn.querySelector("i").className = "fas fa-play";
 		}
 	};
-// habilitar Play cuando elige audio
 	sel.onchange = () => {
 		if (sel.value) {
 			btn.disabled = false;
 			audio.src = `music/${sel.value}`;
-			const svg = btn.querySelector("svg.svg-inline--fa");
-			if (svg) {
-				svg.classList.remove("fa-pause");
-				svg.classList.add("fa-play");
-			}
+			btn.querySelector("i").classList.replace("fa-pause", "fa-play");
 		} else {
 			btn.disabled = true;
 		}
 	};
-	// Play / Pause toggle sobre el <svg>
 	btn.onclick = () => {
-		const svg = btn.querySelector("svg.svg-inline--fa");
+		const icon = btn.querySelector("i");
 		if (audio.paused) {
 			audio.play();
-			if (svg) svg.classList.replace("fa-play", "fa-pause");
+			icon.classList.replace("fa-play", "fa-pause");
 		} else {
 			audio.pause();
-			if (svg) svg.classList.replace("fa-pause", "fa-play");
+			icon.classList.replace("fa-pause", "fa-play");
 		}
 	};
 	row.querySelector(".btnRemoveEvento").onclick = () => {
@@ -362,45 +666,7 @@ function agregarEventoRow() {
 	cont.appendChild(row);
 }
 
-function onGuardarEventos(e) {
-	e.preventDefault();
-	const uid = +document.getElementById("selectUnidad").value;
-
-	// reiniciamos alertas antes de reprogramar
-	clearScheduledAlerts();
-	items.clear(); // opcional: si prefieres reemplazar items existentes
-
-	document.querySelectorAll(".evento-row").forEach(row => {
-		const color = row.querySelector(".evento-color").value;
-		const t = row.querySelector(".evento-titulo").value.trim();
-		const si = row.querySelector(".evento-fecha-inicio").value;
-		const sf = row.querySelector(".evento-fecha-fin").value;
-		const al = row.querySelector(".evento-alerta").checked;
-		const aud = row.querySelector(".evento-audio").value;
-
-		const start = new Date(si);
-		const end = new Date(sf);
-
-		const evt = {
-			id: nextEventId++,
-			group: uid,
-			content: t,
-			start, end,
-			type: 'range',
-			style: `background-color:${color};`,
-			alerta: al,
-			audio: aud
-		};
-		items.add(evt);
-		scheduleAlert(evt);
-	});
-
-	timeline.setItems(items);
-	guardarEnLocalStorage();
-	bootstrap.Modal.getInstance(document.getElementById("modalEventos")).hide();
-}
-
-// — Cargar fechas y extender fin un día completo —
+// ─ Manejo de fechas y recarga del timeline ─
 function onCargarFechas(e) {
 	e.preventDefault();
 	const iniRaw = new Date(document.getElementById("fechaInicio").value + "T00:00");
@@ -409,15 +675,17 @@ function onCargarFechas(e) {
 		return alert("La fecha final debe ser igual o posterior a la inicial.");
 	}
 	const fin = new Date(finRaw);
-	fin.setDate(fin.getDate() + 1);
+	fin.setHours(23, 59, 59, 999);
 	generarTimeline(iniRaw, fin);
 	setControlsDisabled(false);
+	guardarEnLocalStorage();
 }
 
-// — Generar timeline —
+// ─ Generar o regenerar el timeline ─
 function generarTimeline(start, end) {
-	if (isNaN(start) || isNaN(end) || end - start < 2 * 3600000) {
-		start = new Date(); end = new Date(start.getTime() + 2 * 3600000);
+	if (isNaN(start) || isNaN(end) || end - start < 2 * 3600_000) {
+		start = new Date();
+		end = new Date(start.getTime() + 2 * 3600_000);
 	}
 	const oldI = items ? items.get() : [];
 	const oldG = groups ? groups.get() : [];
@@ -425,92 +693,36 @@ function generarTimeline(start, end) {
 	groups = new vis.DataSet(oldG);
 
 	const opts = {
-		start, end, min: start, max: end,
-		showCurrentTime: true, zoomable: true, moveable: true,
+		start, end,
+		min: start, max: end,
+		showCurrentTime: true,
+		zoomable: true,
+		moveable: true,
 		editable: { add: false, updateTime: false, updateGroup: false },
-		groupOrder: "content", orientation: { axis: "top" },
-		timeAxis: { scale: "hour", step: 2 }, margin: { item: { horizontal: 15 }, axis: 5 }
+		groupOrder: "content",
+		orientation: { axis: "top" },
+		timeAxis: { scale: "hour", step: 2 },
+		margin: { item: { horizontal: 15 }, axis: 5 }
 	};
+
 	if (timeline) timeline.destroy();
 	timeline = new vis.Timeline(document.getElementById("visualization"), items, groups, opts);
 }
 
-// — Exportar / Importar / Limpiar / Persistencia —
-function exportarJSON() {
-	const data = { items: items.get(), groups: groups.get() };
-	const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-	const a = document.createElement("a");
-	a.href = URL.createObjectURL(blob);
-	a.download = "timeline_export.json";
-	a.click();
-}
-function importarJSON(e) {
-	const f = e.target.files[0]; if (!f) return;
-	const r = new FileReader();
-	r.onload = ev => {
-		try {
-			const d = JSON.parse(ev.target.result);
-			items.clear(); groups.clear();
-			items.add(d.items || []); groups.add(d.groups || []);
-			const all = items.getIds().map(i => Number(i));
-			nextEventId = all.length ? Math.max(...all) + 1 : 1;
-			cargarDesdeLocalStorage();
-			setControlsDisabled(false);
-		} catch {
-			alert("JSON inválido");
-		}
-	};
-	r.readAsText(f);
-}
-function limpiarTodo() {
-	clearScheduledAlerts();
-	localStorage.removeItem(LS_ITEMS);
-	localStorage.removeItem(LS_GROUPS);
-	localStorage.removeItem(LS_RANGE);
-	items.clear(); groups.clear();
-	generarTimeline(new Date(), new Date(Date.now() + 2 * 3600000));
-	setControlsDisabled(true);
-}
-function guardarEnLocalStorage() {
-	localStorage.setItem(LS_ITEMS, JSON.stringify(items.get()));
-	localStorage.setItem(LS_GROUPS, JSON.stringify(groups.get()));
-	if (timeline) {
-		const w = timeline.getWindow();
-		localStorage.setItem(LS_RANGE, JSON.stringify({ start: w.start, end: w.end }));
-	}
-}
-function cargarDesdeLocalStorage() {
-	const si = localStorage.getItem(LS_ITEMS),
-		sg = localStorage.getItem(LS_GROUPS),
-		sr = localStorage.getItem(LS_RANGE);
-	items = new vis.DataSet(si ? JSON.parse(si) : []);
-	groups = new vis.DataSet(sg ? JSON.parse(sg) : []);
-	const all = items.getIds().map(i => Number(i));
-	nextEventId = all.length ? Math.max(...all) + 1 : 1;
-	const start = sr ? new Date(JSON.parse(sr).start) : new Date(),
-		end = sr ? new Date(JSON.parse(sr).end) : new Date(start.getTime() + 2 * 3600000);
-	document.getElementById("fechaInicio").value = start.toISOString().slice(0, 10);
-	document.getElementById("fechaFin").value = end.toISOString().slice(0, 10);
-	generarTimeline(start, end);
-	// reprogramar todas las alertas pendientes
-	clearScheduledAlerts();
-	items.get().forEach(evt => scheduleAlert(evt));
-}
-
-// — Navegación —
+// ─ Navegación horizontal ─
 function moverVentana(d) {
 	if (!timeline) return;
 	const w = timeline.getWindow();
 	timeline.setWindow(
-		new Date(w.start.getTime() + d * 86400000),
-		new Date(w.end.getTime() + d * 86400000)
+		new Date(w.start.getTime() + d * 24 * 3600_000),
+		new Date(w.end.getTime() + d * 24 * 3600_000)
 	);
 }
 function hacerZoom(f) {
 	if (!timeline) return;
-	const w = timeline.getWindow(),
-		span = w.end - w.start,
-		mid = new Date((w.start.getTime() + w.end.getTime()) / 2);
+	const w = timeline.getWindow();
+	const span = w.end - w.start;
+	const mid = new Date((w.start.getTime() + w.end.getTime()) / 2);
 	timeline.setWindow(
 		new Date(mid.getTime() - span * f / 2),
 		new Date(mid.getTime() + span * f / 2)
@@ -519,8 +731,34 @@ function hacerZoom(f) {
 function centrarEnAhora() {
 	if (timeline) timeline.moveTo(new Date());
 }
+// Vacía el contenedor de filas de evento
+function clearEventosContainer() {
+	document.getElementById("eventosContainer").innerHTML = "";
+}
 
-// — Utilidades —
+// Rellena el SELECT de Grupos en el modal de Eventos
+function fillGrupoSelect() {
+	const sel = document.getElementById("selectGrupo");
+	sel.innerHTML = `<option value="">-- Elige grupo --</option>`;
+	groups.get({ filter: g => g.treeLevel === 1 })
+		.forEach(g => {
+			sel.innerHTML += `<option value="${g.id}">${stripTags(g.content)}</option>`;
+		});
+}
+
+// Rellena el SELECT de Unidades según el grupo seleccionado
+function fillUnidadSelect(gid) {
+	const sel = document.getElementById("selectUnidad");
+	sel.innerHTML = `<option value="">-- Elige unidad --</option>`;
+	groups.get({
+		filter: u =>
+			u.treeLevel === 2 &&
+			String(u.id).startsWith(String(gid))
+	}).forEach(u => {
+		sel.innerHTML += `<option value="${u.id}">${u.content}</option>`;
+	});
+}
+// ─ Utilidades ─
 function stripTags(html) {
 	const tmp = document.createElement("div");
 	tmp.innerHTML = html;
@@ -532,9 +770,37 @@ function generarColorClaro() {
 		r = Math.floor(Math.random() * 256);
 		g = Math.floor(Math.random() * 256);
 		b = Math.floor(Math.random() * 256);
-	} while (0.299 * r + 0.587 * g + 0.114 * b <= 180);
+	} while ((0.299 * r + 0.587 * g + 0.114 * b) <= 180);
 	return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 function esColorClaro(r, g, b) {
 	return (0.299 * r + 0.587 * g + 0.114 * b) > 180;
+}
+
+// ─ Cargar estado desde localStorage ─
+function cargarDesdeLocalStorage() {
+	const si = localStorage.getItem(LS_ITEMS),
+		sg = localStorage.getItem(LS_GROUPS),
+		sr = localStorage.getItem(LS_RANGE);
+
+	items = new vis.DataSet(si ? JSON.parse(si) : []);
+	groups = new vis.DataSet(sg ? JSON.parse(sg) : []);
+
+	const all = items.getIds().map(i => Number(i));
+	nextEventId = all.length ? Math.max(...all) + 1 : 1;
+
+	let start = new Date(), end = new Date(start.getTime() + 2 * 3600_000);
+	if (sr) {
+		const r = JSON.parse(sr);
+		start = new Date(r.start);
+		end = new Date(r.end);
+	}
+	document.getElementById("fechaInicio").value = start.toISOString().slice(0, 10);
+	document.getElementById("fechaFin").value = end.toISOString().slice(0, 10);
+
+	generarTimeline(start, end);
+
+	// Reprogramar alertas
+	clearScheduledAlerts();
+	items.get().forEach(evt => scheduleAlert(evt));
 }

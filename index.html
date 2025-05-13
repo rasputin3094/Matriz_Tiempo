@@ -4,6 +4,7 @@
 <head>
 	<meta charset="UTF-8">
 	<title>Matriz de Sincronización</title>
+	<link rel="icon" type="image/x-icon" href="image/favicon.ico">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 
 	<!-- Bootstrap 5 CSS -->
@@ -75,6 +76,9 @@
 				data-bs-target="#modalGrupos">
 				<i class="fas fa-layer-group me-1"></i>Agregar Grupos
 			</button>
+			<button id="btnEditGrupos" class="btn btn-outline-secondary me-1">
+				<i class="fas fa-edit me-1"></i>Editar Grupos
+			</button>
 			<button id="btnAddEvento" class="btn btn-outline-warning me-1" data-bs-toggle="modal"
 				data-bs-target="#modalEventos">
 				<i class="fas fa-calendar-plus me-1"></i>Agregar Eventos
@@ -93,10 +97,12 @@
 
 		<!-- Navegación / Zoom -->
 		<div class="text-center mb-3">
-			<button id="btnNavBack" class="btn btn-outline-secondary mx-1"><i class="fas fa-backward"></i> Atrás</button>
+			<button id="btnNavBack" class="btn btn-outline-secondary mx-1"><i class="fas fa-backward"></i>
+				Atrás</button>
 			<button id="btnNavForward" class="btn btn-outline-secondary mx-1">Adelante <i
 					class="fas fa-forward"></i></button>
-			<button id="btnZoomIn" class="btn btn-outline-success mx-1"><i class="fas fa-search-plus"></i> Zoom In</button>
+			<button id="btnZoomIn" class="btn btn-outline-success mx-1"><i class="fas fa-search-plus"></i> Zoom
+				In</button>
 			<button id="btnZoomOut" class="btn btn-outline-danger mx-1"><i class="fas fa-search-minus"></i> Zoom
 				Out</button>
 			<button id="btnNow" class="btn btn-outline-primary mx-1"><i class="fas fa-clock"></i> Ahora</button>
@@ -136,7 +142,7 @@
 
 	<!-- Modal Eventos -->
 	<div class="modal fade" id="modalEventos" tabindex="-1">
-		<div class="modal-dialog modal-lg">
+		<div class="modal-dialog modal-xl">
 			<form id="formEventos" class="modal-content">
 				<div class="modal-header">
 					<h5 class="modal-title"><i class="fas fa-calendar-plus me-2"></i>Agregar Eventos</h5>
@@ -157,7 +163,8 @@
 					</button>
 				</div>
 				<div class="modal-footer">
-					<button type="submit" class="btn btn-success"><i class="fas fa-save me-1"></i>Guardar Eventos</button>
+					<button type="submit" class="btn btn-success"><i class="fas fa-save me-1"></i>Guardar
+						Eventos</button>
 					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i
 							class="fas fa-times me-1"></i>Cancelar</button>
 				</div>
