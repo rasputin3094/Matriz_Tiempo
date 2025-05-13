@@ -10,7 +10,6 @@ const LS_GROUPS = "timeline_groups";
 const LS_RANGE = "timeline_range";
 
 let autoSaveInterval = null;
-
 const controlSelectors = [
 	"#btnOpenModal",
 	"#btnAddEvento",
@@ -23,6 +22,32 @@ const controlSelectors = [
 	"#btnZoomOut",
 	"#btnNow"
 ];
+
+// Para programar alertas futuras
+let alertTimeouts = [];
+
+/**
+ * Programa una alerta visual y sonora para un evento
+ * @param {{id:number,content:string,start:Date,alerta:boolean,audio:string}} evt 
+ */
+function scheduleAlert(evt) {
+	if (!evt.alerta || !evt.audio) return;
+	const now = Date.now();
+	const startTime = new Date(evt.start).getTime();
+	const delay = startTime - now;
+	if (delay <= 0) return; // ya pasó
+	const timeoutId = setTimeout(() => {
+		toastr.error(evt.content, '¡Alerta de evento!', { positionClass: 'toast-bottom-right' });
+		new Audio(`music/${evt.audio}`).play();
+	}, delay);
+	alertTimeouts.push(timeoutId);
+}
+
+/** Cancela todas las alertas programadas */
+function clearScheduledAlerts() {
+	alertTimeouts.forEach(id => clearTimeout(id));
+	alertTimeouts = [];
+}
 
 // Carga dinámica de los MP3 desde /music/
 async function loadAudioFiles() {
@@ -126,12 +151,10 @@ function onGrupoChange() {
 	const btnRow = document.getElementById("btnAddEventoRow");
 	const btnSave = document.querySelector("#formEventos button[type='submit']");
 
-	// habilitar/deshabilitar
 	selU.disabled = !gid;
 	btnRow.disabled = !gid;
 	btnSave.disabled = !gid;
 
-	// actualizar color por defecto de los pickers
 	let baseColor = "#ffffff";
 	if (gid) {
 		const style = groups.get(gid).style || "";
@@ -141,11 +164,10 @@ function onGrupoChange() {
 	document.querySelectorAll(".evento-color")
 		.forEach(i => i.value = baseColor);
 
-	// recargar unidades
 	fillUnidadSelect(gid);
 }
 
-// — Reset completo del modal de Eventos al cerrar —
+// — Reset completo del modal de Eventos al cerrarlo —
 function resetModalEventos() {
 	document.getElementById("formEventos").reset();
 	clearEventosContainer();
@@ -178,16 +200,14 @@ function agregarGrupoCard() {
           <i class="fas fa-plus me-1"></i>Agregar Unidad
         </button>
       </div>
-    </div>`
-		;
+    </div>`;
 	col.querySelector(".btnRemoveGrupo").onclick = () => col.remove();
 	col.querySelector(".btnAddUnidad").onclick = () => {
 		const ul = col.querySelector(".lista-unidades");
 		const li = document.createElement("li");
 		li.className = "list-group-item d-flex align-items-center";
 		li.innerHTML = `
-      <input type="text" class="form-control form-control-sm nombre-unidad me-2"
-             placeholder="Nombre de la unidad" required>
+      <input type="text" class="form-control form-control-sm nombre-unidad me-2" placeholder="Nombre de la unidad" required>
       <button type="button" class="btn btn-outline-danger btn-sm btnRemoveUnidad">
         <i class="fas fa-times"></i>
       </button>`;
@@ -213,7 +233,7 @@ function onGuardarGrupos(e) {
 			if (!u) return;
 			const uid = gid * 100 + i + 1;
 			nested.push(uid);
-			arr.push({ id: uid, content: u, treeLevel: 2, style: `background-color:${color}` });
+			arr.push({ id: uid, content: u, treeLevel: 2, style: `background-color:${color}`, alerta: false, audio: "" });
 		});
 		arr.push({
 			id: gid,
@@ -245,7 +265,7 @@ function clearEventosContainer() {
 	document.getElementById("eventosContainer").innerHTML = "";
 }
 
-// — Agregar fila de Evento (play/pause con <i>) —
+// — Agregar fila de Evento —
 function agregarEventoRow() {
 	const gid = +document.getElementById("selectGrupo").value;
 	let defaultColor = "#ffffff";
@@ -254,7 +274,6 @@ function agregarEventoRow() {
 		const m = st.match(/#([0-9A-Fa-f]{6})/);
 		if (m) defaultColor = m[0];
 	}
-
 	const cont = document.getElementById("eventosContainer");
 	const row = document.createElement("div");
 	row.className = "row g-2 align-items-end evento-row mb-2";
@@ -294,15 +313,12 @@ function agregarEventoRow() {
       <button type="button" class="btn btn-outline-secondary btn-sm btnPlayAudio" disabled style="display:none;">
         <i class="fas fa-play"></i>
       </button>
-    </div>`
-		;
-
+    </div>`;
 	const chk = row.querySelector(".evento-alerta");
 	const sel = row.querySelector(".evento-audio");
 	const btn = row.querySelector(".btnPlayAudio");
 	const audio = new Audio();
 
-	// toggle de alerta
 	chk.onchange = () => {
 		const show = chk.checked;
 		sel.style.display = show ? "" : "none";
@@ -313,7 +329,7 @@ function agregarEventoRow() {
 			btn.querySelector("i").className = "fas fa-play";
 		}
 	};
-	// habilitar Play cuando elige audio
+// habilitar Play cuando elige audio
 	sel.onchange = () => {
 		if (sel.value) {
 			btn.disabled = false;
@@ -338,7 +354,6 @@ function agregarEventoRow() {
 			if (svg) svg.classList.replace("fa-pause", "fa-play");
 		}
 	};
-	// eliminar fila
 	row.querySelector(".btnRemoveEvento").onclick = () => {
 		audio.pause();
 		row.remove();
@@ -351,6 +366,10 @@ function onGuardarEventos(e) {
 	e.preventDefault();
 	const uid = +document.getElementById("selectUnidad").value;
 
+	// reiniciamos alertas antes de reprogramar
+	clearScheduledAlerts();
+	items.clear(); // opcional: si prefieres reemplazar items existentes
+
 	document.querySelectorAll(".evento-row").forEach(row => {
 		const color = row.querySelector(".evento-color").value;
 		const t = row.querySelector(".evento-titulo").value.trim();
@@ -362,19 +381,18 @@ function onGuardarEventos(e) {
 		const start = new Date(si);
 		const end = new Date(sf);
 
-		items.add({
+		const evt = {
 			id: nextEventId++,
 			group: uid,
 			content: t,
 			start, end,
 			type: 'range',
-			style: `background-color:${color};`
-		});
-
-		if (al && aud) {
-			toastr.error(t, '¡Alerta de evento!', { positionClass: 'toast-bottom-right' });
-			new Audio(`music/${aud}`).play();
-		}
+			style: `background-color:${color};`,
+			alerta: al,
+			audio: aud
+		};
+		items.add(evt);
+		scheduleAlert(evt);
 	});
 
 	timeline.setItems(items);
@@ -413,35 +431,39 @@ function generarTimeline(start, end) {
 		groupOrder: "content", orientation: { axis: "top" },
 		timeAxis: { scale: "hour", step: 2 }, margin: { item: { horizontal: 15 }, axis: 5 }
 	};
-
 	if (timeline) timeline.destroy();
 	timeline = new vis.Timeline(document.getElementById("visualization"), items, groups, opts);
 }
 
+// — Exportar / Importar / Limpiar / Persistencia —
 function exportarJSON() {
 	const data = { items: items.get(), groups: groups.get() };
 	const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-	const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-	a.download = "timeline_export.json"; a.click();
+	const a = document.createElement("a");
+	a.href = URL.createObjectURL(blob);
+	a.download = "timeline_export.json";
+	a.click();
 }
-
 function importarJSON(e) {
 	const f = e.target.files[0]; if (!f) return;
-	const r = new FileReader(); r.onload = ev => {
+	const r = new FileReader();
+	r.onload = ev => {
 		try {
 			const d = JSON.parse(ev.target.result);
 			items.clear(); groups.clear();
 			items.add(d.items || []); groups.add(d.groups || []);
-			// recalc nextEventId
 			const all = items.getIds().map(i => Number(i));
 			nextEventId = all.length ? Math.max(...all) + 1 : 1;
 			cargarDesdeLocalStorage();
 			setControlsDisabled(false);
-		} catch { alert("JSON inválido"); }
-	}; r.readAsText(f);
+		} catch {
+			alert("JSON inválido");
+		}
+	};
+	r.readAsText(f);
 }
-
 function limpiarTodo() {
+	clearScheduledAlerts();
 	localStorage.removeItem(LS_ITEMS);
 	localStorage.removeItem(LS_GROUPS);
 	localStorage.removeItem(LS_RANGE);
@@ -449,7 +471,6 @@ function limpiarTodo() {
 	generarTimeline(new Date(), new Date(Date.now() + 2 * 3600000));
 	setControlsDisabled(true);
 }
-
 function guardarEnLocalStorage() {
 	localStorage.setItem(LS_ITEMS, JSON.stringify(items.get()));
 	localStorage.setItem(LS_GROUPS, JSON.stringify(groups.get()));
@@ -458,14 +479,12 @@ function guardarEnLocalStorage() {
 		localStorage.setItem(LS_RANGE, JSON.stringify({ start: w.start, end: w.end }));
 	}
 }
-
 function cargarDesdeLocalStorage() {
 	const si = localStorage.getItem(LS_ITEMS),
 		sg = localStorage.getItem(LS_GROUPS),
 		sr = localStorage.getItem(LS_RANGE);
 	items = new vis.DataSet(si ? JSON.parse(si) : []);
 	groups = new vis.DataSet(sg ? JSON.parse(sg) : []);
-	// recalc nextEventId
 	const all = items.getIds().map(i => Number(i));
 	nextEventId = all.length ? Math.max(...all) + 1 : 1;
 	const start = sr ? new Date(JSON.parse(sr).start) : new Date(),
@@ -473,8 +492,12 @@ function cargarDesdeLocalStorage() {
 	document.getElementById("fechaInicio").value = start.toISOString().slice(0, 10);
 	document.getElementById("fechaFin").value = end.toISOString().slice(0, 10);
 	generarTimeline(start, end);
+	// reprogramar todas las alertas pendientes
+	clearScheduledAlerts();
+	items.get().forEach(evt => scheduleAlert(evt));
 }
 
+// — Navegación —
 function moverVentana(d) {
 	if (!timeline) return;
 	const w = timeline.getWindow();
@@ -483,7 +506,6 @@ function moverVentana(d) {
 		new Date(w.end.getTime() + d * 86400000)
 	);
 }
-
 function hacerZoom(f) {
 	if (!timeline) return;
 	const w = timeline.getWindow(),
@@ -494,12 +516,11 @@ function hacerZoom(f) {
 		new Date(mid.getTime() + span * f / 2)
 	);
 }
-
 function centrarEnAhora() {
 	if (timeline) timeline.moveTo(new Date());
 }
 
-// utilidades
+// — Utilidades —
 function stripTags(html) {
 	const tmp = document.createElement("div");
 	tmp.innerHTML = html;
@@ -512,9 +533,7 @@ function generarColorClaro() {
 		g = Math.floor(Math.random() * 256);
 		b = Math.floor(Math.random() * 256);
 	} while (0.299 * r + 0.587 * g + 0.114 * b <= 180);
-	return `#${r.toString(16).padStart(2, "0")}
-		+ ${g.toString(16).padStart(2, "0")}
-		+ ${b.toString(16).padStart(2, "0")};`
+	return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 function esColorClaro(r, g, b) {
 	return (0.299 * r + 0.587 * g + 0.114 * b) > 180;
