@@ -52,79 +52,77 @@
 </head>
 
 <body class="bg-light">
-	<div class="container py-4">
-		<h4 class="text-center mb-4">Matriz de Sincronización</h4>
-
-		<!-- Fechas -->
-		<form id="form-fechas" class="row g-3 mb-4">
-			<div class="col-md-5">
-				<label class="form-label">Fecha inicio</label>
-				<input type="date" id="fechaInicio" class="form-control" required>
+	<div class="container-fluid px-5 py-4 ">
+		<div class="card">
+			<div class="card-header bg-primary text-white">
+				<h5 class="card-title mb-0"><i class="fas fa-calendar-alt me-2"></i>Matriz de Sincronización</h5>
 			</div>
-			<div class="col-md-5">
-				<label class="form-label">Fecha fin</label>
-				<input type="date" id="fechaFin" class="form-control" required>
+			<div class="card-body">
+				<!-- Fechas -->
+				<form id="form-fechas" class="row g-3 mb-4">
+					<div class="col-md-5">
+						<label class="form-label">Fecha inicio</label>
+						<input type="date" id="fechaInicio" class="form-control" required>
+					</div>
+					<div class="col-md-5">
+						<label class="form-label">Fecha fin</label>
+						<input type="date" id="fechaFin" class="form-control" required>
+					</div>
+					<div class="col-md-2 d-flex align-items-end">
+						<button type="submit" class="btn btn-primary w-100">Cargar</button>
+					</div>
+				</form>
+				<!-- Controles -->
+				<div class="text-center mb-3">					
+					<button id="btnExportar" class="btn btn-outline-success me-1">
+						<i class="fas fa-file-export me-1"></i>Exportar Configuración
+					</button>
+					<label class="btn btn-outline-info me-1 mb-0">
+						<i class="fas fa-file-import me-1"></i>Importar Configuración
+						<input type="file" id="btnImportar" hidden accept=".json">
+					</label>
+					<button id="btnLimpiar" class="btn btn-outline-danger">
+						<i class="fas fa-trash-alt me-1"></i>Limpiar Todo
+					</button>
+				</div>
+				<!-- Navegación / Zoom -->
+				<div class="text-center mb-3">
+					<button id="btnNavBack" class="btn btn-outline-secondary mx-1"><i class="fas fa-backward"></i>
+						Atrás</button>
+					<button id="btnNavForward" class="btn btn-outline-secondary mx-1">Adelante <i
+							class="fas fa-forward"></i></button>
+					<button id="btnZoomIn" class="btn btn-outline-success mx-1"><i class="fas fa-search-plus"></i> Zoom
+						In</button>
+					<button id="btnZoomOut" class="btn btn-outline-danger mx-1"><i class="fas fa-search-minus"></i> Zoom
+						Out</button>
+					<button id="btnNow" class="btn btn-outline-primary mx-1"><i class="fas fa-clock"></i> Ahora</button>
+				</div>
+				<!-- Timeline -->
+				<div class="overflow-auto">
+					<div id="visualization" class="w-100"></div>
+				</div>
+				<div class="d-flex justify-content-between mt-3">
+					<button id="btnOpenModal" class="btn btn-primary me-1" data-bs-toggle="modal"data-bs-target="#modalGrupos"><i class="fas fa-layer-group me-1"></i>Grupos y Unidades</button>
+					<button id="btnEditGrupos" class="btn btn-secondary me-1"><i class="fas fa-edit me-1"></i>Editar Grupos y Unidades</button>
+					<button id="btnAddEvento" class="btn btn-success me-1" data-bs-toggle="modal"data-bs-target="#modalEventos"><i class="fas fa-calendar-plus me-1"></i>Agregar Eventos</button>
+
+				</div>
 			</div>
-			<div class="col-md-2 d-flex align-items-end">
-				<button type="submit" class="btn btn-primary w-100">Cargar</button>
-			</div>
-		</form>
-
-		<!-- Controles -->
-		<div class="text-center mb-3">
-			<button id="btnOpenModal" class="btn btn-outline-primary me-1" data-bs-toggle="modal"
-				data-bs-target="#modalGrupos">
-				<i class="fas fa-layer-group me-1"></i>Agregar Grupos
-			</button>
-			<button id="btnEditGrupos" class="btn btn-outline-secondary me-1">
-				<i class="fas fa-edit me-1"></i>Editar Grupos
-			</button>
-			<button id="btnAddEvento" class="btn btn-outline-warning me-1" data-bs-toggle="modal"
-				data-bs-target="#modalEventos">
-				<i class="fas fa-calendar-plus me-1"></i>Agregar Eventos
-			</button>
-			<button id="btnExportar" class="btn btn-outline-success me-1">
-				<i class="fas fa-file-export me-1"></i>Exportar JSON
-			</button>
-			<label class="btn btn-outline-info me-1 mb-0">
-				<i class="fas fa-file-import me-1"></i>Importar JSON
-				<input type="file" id="btnImportar" hidden accept=".json">
-			</label>
-			<button id="btnLimpiar" class="btn btn-outline-danger">
-				<i class="fas fa-trash-alt me-1"></i>Limpiar Todo
-			</button>
-		</div>
-
-		<!-- Navegación / Zoom -->
-		<div class="text-center mb-3">
-			<button id="btnNavBack" class="btn btn-outline-secondary mx-1"><i class="fas fa-backward"></i>
-				Atrás</button>
-			<button id="btnNavForward" class="btn btn-outline-secondary mx-1">Adelante <i
-					class="fas fa-forward"></i></button>
-			<button id="btnZoomIn" class="btn btn-outline-success mx-1"><i class="fas fa-search-plus"></i> Zoom
-				In</button>
-			<button id="btnZoomOut" class="btn btn-outline-danger mx-1"><i class="fas fa-search-minus"></i> Zoom
-				Out</button>
-			<button id="btnNow" class="btn btn-outline-primary mx-1"><i class="fas fa-clock"></i> Ahora</button>
-		</div>
-
-		<!-- Timeline -->
-		<div class="overflow-auto">
-			<div id="visualization" class="w-100"></div>
 		</div>
 	</div>
 
 	<!-- Modal Grupos y Unidades -->
 	<div class="modal fade" id="modalGrupos" tabindex="-1">
 		<div class="modal-dialog modal-xl modal-dialog-scrollable">
-			<form id="formGrupos" class="modal-content">
-				<div class="modal-header">
+			<form id="formGrupos" class="modal-content border-0 shadow">
+				<div class="modal-header bg-primary text-white">
 					<h5 class="modal-title"><i class="fas fa-layer-group me-2"></i>Configurar Grupos y Unidades</h5>
-					<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+					<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+						aria-label="Cerrar"></button>
 				</div>
 				<div class="modal-body">
 					<div id="contenedorGrupos" class="row g-3"></div>
-					<button type="button" id="btnAddGrupo" class="btn btn-outline-primary mt-3">
+					<button type="button" id="btnAddGrupo" class="btn btn-outline-primary mt-3 w-100">
 						<i class="fas fa-plus-circle me-1"></i>Nuevo Grupo
 					</button>
 				</div>
@@ -143,32 +141,117 @@
 	<!-- Modal Eventos -->
 	<div class="modal fade" id="modalEventos" tabindex="-1">
 		<div class="modal-dialog modal-xl">
-			<form id="formEventos" class="modal-content">
-				<div class="modal-header">
+			<form id="formEventos" class="modal-content border-0 shadow">
+				<div class="modal-header bg-primary text-white">
 					<h5 class="modal-title"><i class="fas fa-calendar-plus me-2"></i>Agregar Eventos</h5>
-					<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+					<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+						aria-label="Cerrar"></button>
 				</div>
 				<div class="modal-body">
-					<div class="mb-3">
-						<label class="form-label">Grupo</label>
-						<select id="selectGrupo" class="form-select" required></select>
-					</div>
-					<div class="mb-3">
-						<label class="form-label">Unidad</label>
-						<select id="selectUnidad" class="form-select" required></select>
+					<div class="row mb-3">
+						<div class="col-md-6">
+							<label class="form-label">Grupo</label>
+							<select id="selectGrupo" class="form-select" required></select>
+						</div>
+						<div class="col-md-6">
+							<label class="form-label">Unidad</label>
+							<select id="selectUnidad" class="form-select" required></select>
+						</div>
 					</div>
 					<div id="eventosContainer"></div>
-					<button type="button" id="btnAddEventoRow" class="btn btn-sm btn-outline-secondary mt-2">
+					<button type="button" id="btnAddEventoRow" class="btn btn-sm btn-outline-secondary mt-3 w-100">
 						<i class="fas fa-plus me-1"></i>Nueva Fila de Evento
 					</button>
 				</div>
 				<div class="modal-footer">
-					<button type="submit" class="btn btn-success"><i class="fas fa-save me-1"></i>Guardar
-						Eventos</button>
-					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i
-							class="fas fa-times me-1"></i>Cancelar</button>
+					<button type="submit" class="btn btn-success">
+						<i class="fas fa-save me-1"></i>Guardar Eventos
+					</button>
+					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+						<i class="fas fa-times me-1"></i>Cancelar
+					</button>
 				</div>
 			</form>
+		</div>
+	</div>
+
+	<!-- Modal editar evento -->
+	<div class="modal fade" id="modalEditarEvento" tabindex="-1" aria-labelledby="modalEditarEventoLabel"
+		aria-hidden="true">
+		<div class="modal-dialog modal-xl">
+			<div class="modal-content border-0 shadow">
+				<div class="modal-header bg-primary text-white">
+					<h5 class="modal-title" id="modalEditarEventoLabel"><i class="fas fa-pen me-2"></i>Editar Evento
+					</h5>
+					<button type="button" class="btn-close text-white" data-bs-dismiss="modal"
+						aria-label="Cerrar"></button>
+				</div>
+				<div class="modal-body">
+					<form id="formEditarEvento">
+						<input type="hidden" id="eventoId">
+
+						<div class="row mb-3">
+							<div class="col-md-6">
+								<label class="form-label">Grupo</label>
+								<input type="text" class="form-control" id="grupoEvento" readonly>
+							</div>
+							<div class="col-md-6">
+								<label class="form-label">Unidad</label>
+								<input type="text" class="form-control" id="unidadEvento" readonly>
+							</div>
+						</div>
+
+						<div class="mb-3">
+							<label class="form-label">Nombre del evento</label>
+							<input type="text" class="form-control" id="nombreEvento">
+						</div>
+
+						<div class="row mb-3">
+							<div class="col-md-3">
+								<label class="form-label">Inicio</label>
+								<input type="datetime-local" class="form-control" id="inicioEvento">
+							</div>
+							<div class="col-md-3">
+								<label class="form-label">Fin</label>
+								<input type="datetime-local" class="form-control" id="finEvento">
+							</div>
+							<div class="col-md-3">
+								<label class="form-label">Color del evento</label>
+								<input type="color" class="form-control form-control-color" id="colorEvento">
+							</div>
+							<div class="col-md-3">
+								<label class="form-label d-block">Alerta</label>
+								<div class="form-check form-switch">
+									<input class="form-check-input" type="checkbox" id="alertaEvento">
+									<label class="form-check-label" for="alertaEvento">Activar alerta</label>
+								</div>
+							</div>
+						</div>
+
+						<div class="row mb-2" id="filaAlerta" style="display:none;">
+							<div class="col-md-9">
+								<label class="form-label">Seleccionar archivo de alerta</label>
+								<select class="form-select" id="audioSelect">
+									<option value="">Seleccione alarma</option>
+									${audioFiles.map(f => `<option value="${f}">${f}</option>`).join("")}
+								</select>
+							</div>
+							<div class="col-md-3 d-flex align-items-end">
+								<button type="button" class="btn btn-outline-secondary w-100" id="btnPlayAudio"
+									disabled>
+									<i class="fas fa-play"></i> Reproducir
+								</button>
+							</div>
+						</div>
+					</form>
+				</div>
+
+				<div class="modal-footer">
+					<button class="btn btn-danger" id="btnEliminarEvento"><i class="fa fa-trash"></i> Eliminar</button>
+					<button class="btn btn-success" id="btnGuardarCambios"><i class="fa fa-save"></i> Guardar
+						Cambios</button>
+				</div>
+			</div>
 		</div>
 	</div>
 

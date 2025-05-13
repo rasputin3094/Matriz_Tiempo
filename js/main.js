@@ -225,7 +225,7 @@ function agregarGrupoCard() {
           </button>
         </div>
         <ul class="list-group lista-unidades mb-3"></ul>
-        <button type="button" class="btn btn-outline-secondary btn-sm btnAddUnidad">
+        <button type="button" class="btn btn-outline-secondary btn-sm w-100 btnAddUnidad">
           <i class="fas fa-plus me-1"></i>Agregar Unidad
         </button>
       </div>
@@ -333,30 +333,39 @@ function onGuardarGrupos(e) {
 	}
 
 	// Modo batch (crear/reemplazar todos)
-	groups.clear();
+	// groups.clear();
 	const arr = [];
+	let orden = 0;
 	document.querySelectorAll("#contenedorGrupos [data-grupo-id]").forEach(col => {
 		const gid = +col.dataset.grupoId;
 		const gName = col.querySelector(".nombre-grupo").value.trim();
 		if (!gName) return;
 		let color = col.querySelector(".color-grupo").value;
-		const [r, g, b] = color.match(/[A-Fa-f0-9]{2}/g).map(h => parseInt(h, 16));
-		if (!esColorClaro(r, g, b)) color = generarColorClaro();
+		// const [r, g, b] = color.match(/[A-Fa-f0-9]{2}/g).map(h => parseInt(h, 16));
+		// if (!esColorClaro(r, g, b)) color = generarColorClaro();
 		const nested = [];
 		col.querySelectorAll(".nombre-unidad").forEach((inp, i) => {
 			const u = inp.value.trim();
 			if (!u) return;
 			const uid = gid * 100 + i + 1;
 			nested.push(uid);
-			arr.push({ id: uid, content: u, treeLevel: 2, style: `background-color:${color}` });
+			arr.push({
+				id: uid,
+				content: u,
+				treeLevel: 2,
+				style: `background-color:${color}`,
+				order: orden + i + 1 // no estrictamente necesario para subgrupos
+			});
 		});
 		arr.push({
 			id: gid,
 			content: `<strong>${gName}</strong>`,
 			treeLevel: 1,
 			nestedGroups: nested,
-			style: `background-color:${color}`
+			style: `background-color:${color}`,
+			order: orden
 		});
+		orden++;
 	});
 	groups.add(arr);
 	timeline.setGroups(groups);
@@ -387,7 +396,7 @@ function crearGrupoCardDesdeData(gid, nombre, style, nestedIds) {
           </button>
         </div>
         <ul class="list-group lista-unidades mb-3"></ul>
-        <button type="button" class="btn btn-outline-secondary btn-sm btnAddUnidad">
+        <button type="button" class="btn btn-outline-secondary btn-sm btnAddUnidad w-100">
           <i class="fas fa-plus me-1"></i>Agregar Unidad
         </button>
       </div>
@@ -492,7 +501,15 @@ function guardarEnLocalStorage() {
 
 // ─ Exportar JSON ─
 function exportarJSON() {
-	const data = { items: items.get(), groups: groups.get() };
+	const range = timeline.getWindow();
+	const data = {
+		items: items.get(),
+		groups: groups.get(),
+		range: {
+			start: range.start.toISOString(),
+			end: range.end.toISOString()
+		}
+	};
 	const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
 	const a = document.createElement("a");
 	a.href = URL.createObjectURL(blob);
@@ -514,8 +531,22 @@ function importarJSON(e) {
 			groups.add(d.groups || []);
 			const all = items.getIds().map(i => Number(i));
 			nextEventId = all.length ? Math.max(...all) + 1 : 1;
-			cargarDesdeLocalStorage();
+
+			// Establecer rango de fechas si viene
+			let start = new Date();
+			let end = new Date(start.getTime() + 2 * 3600_000);
+			if (d.range?.start && d.range?.end) {
+				start = new Date(d.range.start);
+				end = new Date(d.range.end);
+			}
+
+			document.getElementById("fechaInicio").value = start.toISOString().slice(0, 10);
+			document.getElementById("fechaFin").value = end.toISOString().slice(0, 10);
+
+			generarTimeline(start, end);
 			setControlsDisabled(false);
+			clearScheduledAlerts();
+			items.get().forEach(evt => scheduleAlert(evt));
 		} catch {
 			alert("JSON inválido");
 		}
@@ -523,17 +554,39 @@ function importarJSON(e) {
 	r.readAsText(f);
 }
 
-// ─ Limpiar todo ─
+
 function limpiarTodo() {
+	// Cancelar alertas activas
 	clearScheduledAlerts();
+
+	// Borrar LocalStorage
 	localStorage.removeItem(LS_ITEMS);
 	localStorage.removeItem(LS_GROUPS);
 	localStorage.removeItem(LS_RANGE);
+
+	// Limpiar datasets
 	items.clear();
 	groups.clear();
-	generarTimeline(new Date(), new Date(Date.now() + 2 * 3600_000));
+
+	// Vaciar inputs de fecha
+	document.getElementById("fechaInicio").value = "";
+	document.getElementById("fechaFin").value = "";
+
+	// Limpiar selects del modal de eventos
+	document.getElementById("selectGrupo").innerHTML = `<option value="">-- Elige grupo --</option>`;
+	document.getElementById("selectUnidad").innerHTML = `<option value="">-- Elige unidad --</option>`;
+	document.getElementById("selectUnidad").disabled = true;
+
+	// Limpiar contenedor de eventos
+	document.getElementById("eventosContainer").innerHTML = "";
+
+	// Deshabilitar botones
 	setControlsDisabled(true);
+
+	// Regenerar timeline limpio
+	generarTimeline(new Date(), new Date(Date.now() + 2 * 3600_000));
 }
+
 
 // ─ Modal Eventos: Guardar nuevos eventos ─
 function onGuardarEventos(e) {
@@ -699,7 +752,8 @@ function generarTimeline(start, end) {
 		zoomable: true,
 		moveable: true,
 		editable: { add: false, updateTime: false, updateGroup: false },
-		groupOrder: "content",
+		// groupOrder: "content",
+		groupOrder: (a, b) => (a.order ?? 0) - (b.order ?? 0),
 		orientation: { axis: "top" },
 		timeAxis: { scale: "hour", step: 2 },
 		margin: { item: { horizontal: 15 }, axis: 5 }
@@ -707,8 +761,45 @@ function generarTimeline(start, end) {
 
 	if (timeline) timeline.destroy();
 	timeline = new vis.Timeline(document.getElementById("visualization"), items, groups, opts);
-}
 
+	timeline.on("doubleClick", props => {
+		if (props.item == null) return;
+
+		const evt = items.get(props.item);
+		if (!evt) return;
+
+		document.getElementById("eventoId").value = evt.id;
+		document.getElementById("nombreEvento").value = evt.content;
+		document.getElementById("inicioEvento").value = toLocalDateTimeString(evt.start);
+		document.getElementById("finEvento").value = toLocalDateTimeString(evt.end);
+		document.getElementById("colorEvento").value = evt.style?.match(/#([0-9A-Fa-f]{6})/)?.[0] || "#ffffff";
+		document.getElementById("alertaEvento").checked = !!evt.alerta;
+
+		const fila = document.getElementById("filaAlerta");
+		fila.style.display = evt.alerta ? "" : "none";
+		const sel = document.getElementById("audioSelect");
+		sel.innerHTML = '<option value="">Seleccione alarma</option>' + audioFiles.map(f => `<option value="${f}">${f}</option>`).join("");
+		sel.value = evt.audio || "";
+		document.getElementById("btnPlayAudio").disabled = !evt.audio;
+
+		const unidad = groups.get(evt.group);
+		const grupo = groups.get(+String(evt.group).slice(0, -2));
+		document.getElementById("grupoEvento").value = grupo ? stripTags(grupo.content) : "Desconocido";
+		document.getElementById("unidadEvento").value = unidad ? unidad.content : "Desconocido";
+
+		new bootstrap.Modal(document.getElementById("modalEditarEvento")).show();
+	});
+}
+function toLocalDateTimeString(date) {
+	const d = new Date(date);
+	const pad = n => n.toString().padStart(2, '0');
+	const yyyy = d.getFullYear();
+	const mm = pad(d.getMonth() + 1);
+	const dd = pad(d.getDate());
+	const hh = pad(d.getHours());
+	const mi = pad(d.getMinutes());
+	return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
 // ─ Navegación horizontal ─
 function moverVentana(d) {
 	if (!timeline) return;
@@ -804,3 +895,70 @@ function cargarDesdeLocalStorage() {
 	clearScheduledAlerts();
 	items.get().forEach(evt => scheduleAlert(evt));
 }
+
+document.getElementById("alertaEvento").addEventListener("change", function () {
+	const fila = document.getElementById("filaAlerta");
+	fila.style.display = this.checked ? "" : "none";
+});
+
+document.getElementById("audioSelect").addEventListener("change", function () {
+	const btn = document.getElementById("btnPlayAudio");
+	btn.disabled = !this.value;
+});
+
+document.getElementById("btnPlayAudio").addEventListener("click", () => {
+	const audio = new Audio(`music/${document.getElementById("audioSelect").value}`);
+	audio.play();
+});
+
+document.getElementById("btnGuardarCambios").addEventListener("click", async () => {
+	const id = +document.getElementById("eventoId").value;
+	const evt = items.get(id);
+	if (!evt) return;
+
+	const result = await Swal.fire({
+		title: "¿Guardar cambios?",
+		icon: "question",
+		showCancelButton: true,
+		confirmButtonText: "Sí, guardar",
+		cancelButtonText: "Cancelar"
+	});
+	if (!result.isConfirmed) return;
+
+	evt.content = document.getElementById("nombreEvento").value.trim();
+	evt.start = new Date(document.getElementById("inicioEvento").value);
+	evt.end = new Date(document.getElementById("finEvento").value);
+	evt.style = `background-color:${document.getElementById("colorEvento").value}`;
+	evt.alerta = document.getElementById("alertaEvento").checked;
+	evt.audio = document.getElementById("audioSelect").value || "";
+
+	items.update(evt);
+	clearScheduledAlerts();
+	items.get().forEach(e => scheduleAlert(e));
+	timeline.setItems(items);
+	guardarEnLocalStorage();
+	bootstrap.Modal.getInstance(document.getElementById("modalEditarEvento")).hide();
+});
+
+document.getElementById("btnEliminarEvento").addEventListener("click", async () => {
+	const id = +document.getElementById("eventoId").value;
+	const evt = items.get(id);
+	if (!evt) return;
+
+	const result = await Swal.fire({
+		title: "¿Eliminar evento?",
+		text: "Esta acción no se puede deshacer.",
+		icon: "warning",
+		showCancelButton: true,
+		confirmButtonText: "Sí, eliminar",
+		cancelButtonText: "Cancelar"
+	});
+	if (!result.isConfirmed) return;
+
+	items.remove(id);
+	clearScheduledAlerts();
+	items.get().forEach(e => scheduleAlert(e));
+	timeline.setItems(items);
+	guardarEnLocalStorage();
+	bootstrap.Modal.getInstance(document.getElementById("modalEditarEvento")).hide();
+});
